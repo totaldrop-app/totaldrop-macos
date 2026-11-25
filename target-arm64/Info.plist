@@ -6,6 +6,8 @@
   <string>en</string>
   <key>CFBundleExecutable</key>
   <string>TotalDropMac</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleIdentifier</key>
   <string>app.totaldrop.mac</string>
   <key>CFBundleInfoDictionaryVersion</key>
@@ -17,11 +19,19 @@
   <key>CFBundleShortVersionString</key>
   <string>@VERSION@</string>
   <key>CFBundleVersion</key>
-  <string>@VERSION@</string>
+  <string>@BUILD_NUMBER@</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.utilities</string>
   <key>LSMinimumSystemVersion</key>
   <string>15.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright 2026 The TotalDrop Contributors. Licensed GPL-3.0-or-later.</string>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+  <key>NSSupportsAutomaticTermination</key>
+  <false/>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>

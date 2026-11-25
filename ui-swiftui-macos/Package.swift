@@ -8,7 +8,7 @@ let package = Package(
     name: "TotalDropMac",
     defaultLocalization: "en",
     platforms: [
-        .macOS(.v14),
+        .macOS(.v15),
     ],
     products: [
         .executable(
@@ -22,8 +22,14 @@ let package = Package(
         ),
     ],
     targets: [
+        .target(
+            name: "CTotalDropMacFFI",
+            path: "Sources/CTotalDropMacFFI",
+            publicHeadersPath: "include"
+        ),
         .executableTarget(
             name: "TotalDropMac",
+            dependencies: ["CTotalDropMacFFI"],
             path: "Sources/TotalDropMac",
             swiftSettings: [
                 .swiftLanguageMode(.v6),
@@ -35,6 +41,9 @@ let package = Package(
                 .linkedFramework("Vision"),
                 .linkedFramework("CoreImage"),
                 .linkedFramework("UniformTypeIdentifiers"),
+                .linkedFramework("Security"),
+                .linkedFramework("SystemConfiguration"),
+                .linkedFramework("CoreFoundation"),
             ]
         ),
         .target(
@@ -51,7 +60,7 @@ let package = Package(
         ),
         .testTarget(
             name: "TotalDropMacTests",
-            dependencies: ["TotalDropMac"],
+            dependencies: ["TotalDropMac", "CTotalDropMacFFI"],
             path: "Tests/TotalDropMacTests",
             swiftSettings: [
                 .swiftLanguageMode(.v6),

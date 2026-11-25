@@ -7,7 +7,7 @@
 # `reuse lint` alone would not catch a source file missing its header.
 set -eu
 cd "$(dirname "$0")/.."
-missing=$(git ls-files '*.rs' '*.swift' '*.sh' '*.py' '*.rb' |
+missing=$(git ls-files '*.rs' '*.swift' '*.c' '*.h' '*.sh' '*.py' '*.rb' |
   # REUSE-IgnoreStart (the patterns below are not this file's tags)
   while IFS= read -r f; do
     head -n 6 "$f" | grep -q 'SPDX-FileCopyrightText:' &&

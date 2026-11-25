@@ -7,7 +7,8 @@ import UniformTypeIdentifiers
 import Vision
 
 /// Native macOS SwiftUI view for entering or pasting a transfer code, scanning a QR image,
-/// reviewing the offer and verification words, and saving files to `~/Downloads/TotalDrop`.
+/// reviewing the offer and verification words, accepting or declining through Rust FFI,
+/// and displaying received text or saving verified files to `~/Downloads/TotalDrop`.
 public struct ReceiveView: View {
     @Bindable var model: MacAppModel
     @State private var isQRImagePickerPresented = false
@@ -20,9 +21,9 @@ public struct ReceiveView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Receive files")
+                    Text(model.t("receiveTitle", fallback: "Receive files"))
                         .font(.title2.weight(.semibold))
-                    Text("Enter a code or open a TotalDrop link to inspect and save verified files.")
+                    Text(model.t("receiveCodeHelp", fallback: "Ask the sender for their code."))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -30,12 +31,45 @@ public struct ReceiveView: View {
                 switch model.phase {
                 case .connecting(let code):
                     connectingCard(code: code)
-                case .offerPending(let files, let totalBytes, let words, let names, let hasHiddenControls):
-                    offerCard(files: files, totalBytes: totalBytes, words: words, names: names, hasHiddenControls: hasHiddenControls)
+                case .offerPending(
+                    _,
+                    _,
+                    _,
+                    _,
+                    _,
+                    let headline,
+                    let summaryLine,
+                    let words,
+                    let names,
+                    let moreNamesLine,
+                    let hasHiddenControls
+                ):
+                    offerCard(
+                        headline: headline,
+                        summaryLine: summaryLine,
+                        words: words,
+                        names: names,
+                        moreNamesLine: moreNamesLine,
+                        hasHiddenControls: hasHiddenControls
+                    )
                 case .transferring(_, _, let percent, let fractionText, _, let words):
                     receivingCard(percent: percent, fractionText: fractionText, words: words)
-                case .completed(let summaryText, let savedFolder):
-                    completedCard(summaryText: summaryText, savedFolder: savedFolder)
+                case .completed(
+                    let summaryText,
+                    let savedFolder,
+                    let receivedText,
+                    let sanitizedText,
+                    let textShortened,
+                    let textHadHiddenControls
+                ):
+                    completedCard(
+                        summaryText: summaryText,
+                        savedFolder: savedFolder,
+                        receivedText: receivedText,
+                        sanitizedText: sanitizedText,
+                        textShortened: textShortened,
+                        textHadHiddenControls: textHadHiddenControls
+                    )
                 case .failed(let headline, let cause, let detail):
                     failedCard(headline: headline, cause: cause, detail: detail)
                 default:
@@ -57,47 +91,50 @@ public struct ReceiveView: View {
 
     private var codeEntryCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Code")
+            Text(model.t("receiveCodeLabel", fallback: "Code"))
                 .font(.headline)
 
             HStack(spacing: 10) {
-                TextField("7-harbor-rocket", text: $model.receiveInputCode)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
-                    .onSubmit {
-                        model.startReceiveConnection()
-                    }
+                TextField(
+                    model.t("receiveCodeHint", fallback: "7-harbor-rocket"),
+                    text: $model.receiveInputCode
+                )
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+                .onSubmit {
+                    model.startReceiveConnection()
+                }
 
                 Button {
                     if let pasted = NSPasteboard.general.string(forType: .string) {
-                        if let url = URL(string: pasted.trimmingCharacters(in: .whitespacesAndNewlines)),
-                           let extracted = MacAppModel.extractTransferCode(from: url)
-                        {
+                        if let extracted = model.extractCodeFromClipboardText(pasted) {
                             model.receiveInputCode = extracted
                         } else {
                             model.receiveInputCode = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
                         }
                     }
                 } label: {
-                    Label("Paste", systemImage: "doc.on.clipboard")
+                    Label(model.t("receivePaste", fallback: "Paste"), systemImage: "doc.on.clipboard")
                 }
 
                 Button {
                     isQRImagePickerPresented = true
                 } label: {
-                    Label("Read QR from image…", systemImage: "qrcode.viewfinder")
+                    Label(model.t("receiveFromImage", fallback: "Read QR from image"), systemImage: "qrcode.viewfinder")
                 }
             }
 
             HStack {
-                Text("Files save to ~/Downloads/TotalDrop after BLAKE3 verification.")
-                    .font(.caption)
+                Text(model.destinationFolder.path)
+                    .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
                 Spacer()
                 Button {
                     model.startReceiveConnection()
                 } label: {
-                    Text("Connect")
+                    Text(model.t("receiveConnect", fallback: "Connect"))
                         .frame(minWidth: 110)
                 }
                 .buttonStyle(.borderedProminent)
@@ -113,14 +150,14 @@ public struct ReceiveView: View {
         HStack(spacing: 12) {
             ProgressView()
             VStack(alignment: .leading, spacing: 2) {
-                Text("Connecting securely…")
+                Text(model.t("receiveConnecting", fallback: "Connecting securely…"))
                     .font(.headline)
                 Text(code)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button("Cancel", role: .destructive) {
+            Button(model.t("cancel", fallback: "Cancel"), role: .destructive) {
                 model.stopActiveTransfer()
             }
         }
@@ -129,27 +166,28 @@ public struct ReceiveView: View {
     }
 
     private func offerCard(
-        files: Int,
-        totalBytes: UInt64,
+        headline: String,
+        summaryLine: String,
         words: [String],
         names: [String],
+        moreNamesLine: String?,
         hasHiddenControls: Bool
     ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Incoming files")
+            Text(headline)
                 .font(.title3.weight(.semibold))
 
-            Text("\(files) file(s) · \(ByteCountFormatter.string(fromByteCount: Int64(clamping: totalBytes), countStyle: .file))")
+            Text(summaryLine)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Verification words")
+                Text(model.t("verificationTitle", fallback: "Verification words"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(words.joined(separator: " · "))
                     .font(.headline.monospaced())
-                Text("The other person sees the same four words. If they differ, stop.")
+                Text(model.t("verificationHint", fallback: "The other person sees the same four words. If they differ, stop."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -158,27 +196,35 @@ public struct ReceiveView: View {
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
 
             if hasHiddenControls {
-                Label("Hidden direction or control characters in names are shown as <U+…>.", systemImage: "exclamationmark.shield")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+                Label(
+                    model.t("receiveTextHidden", fallback: "Hidden direction or control characters in names are shown as <U+…>."),
+                    systemImage: "exclamationmark.shield"
+                )
+                .font(.caption)
+                .foregroundStyle(.orange)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(names.prefix(10), id: \.self) { item in
-                    Text("• \(item)")
-                        .font(.callout.monospaced())
+            if !names.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(names.prefix(10), id: \.self) { item in
+                        Text("• \(item)")
+                            .font(.callout.monospaced())
+                    }
+                    if let more = moreNamesLine {
+                        Text(more)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
             HStack {
-                Button("Decline", role: .destructive) {
-                    model.stopActiveTransfer()
+                Button(model.t("receiveDecline", fallback: "Decline"), role: .destructive) {
+                    model.declinePendingOffer()
                 }
                 Spacer()
-                Button("Accept") {
-                    let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first?
-                        .appendingPathComponent("TotalDrop", isDirectory: true)
-                    model.phase = .completed(summaryText: "All \(files) file(s) arrived intact.", savedFolder: downloads)
+                Button(model.t("receiveAccept", fallback: "Accept")) {
+                    model.acceptPendingOffer()
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -196,14 +242,14 @@ public struct ReceiveView: View {
             }
             ProgressView(value: Double(percent), total: 100.0) {
                 HStack {
-                    Text("Receiving")
+                    Text(model.t("receiveReceiving", fallback: "Receiving"))
                     Spacer()
-                    Text("\(percent)% · \(fractionText)")
+                    Text(fractionText.isEmpty ? "\(percent)%" : "\(percent)% · \(fractionText)")
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
             }
-            Button("Stop", role: .destructive) {
+            Button(model.t("stop", fallback: "Stop"), role: .destructive) {
                 model.stopActiveTransfer()
             }
         }
@@ -211,20 +257,66 @@ public struct ReceiveView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func completedCard(summaryText: String, savedFolder: URL?) -> some View {
+    private func completedCard(
+        summaryText: String,
+        savedFolder: URL?,
+        receivedText: String?,
+        sanitizedText: String?,
+        textShortened: Bool,
+        textHadHiddenControls: Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Received and verified", systemImage: "checkmark.seal.fill")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.green)
+            Label(
+                receivedText != nil
+                    ? model.t("receiveTextDone", fallback: "Text received and verified")
+                    : model.t("receiveDone", fallback: "Received and verified"),
+                systemImage: "checkmark.seal.fill"
+            )
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(.green)
+
             Text(summaryText)
                 .foregroundStyle(.secondary)
+
+            if let display = sanitizedText ?? receivedText {
+                if textHadHiddenControls {
+                    Label(
+                        model.t("receiveTextHidden", fallback: "The text holds hidden characters, shown as U+…."),
+                        systemImage: "exclamationmark.shield"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                }
+                if textShortened {
+                    Text(model.t("receiveTextShortened", fallback: "Only the beginning of the text is shown. Copy text copies all of it."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                ScrollView {
+                    Text(display)
+                        .font(.body.monospaced())
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                }
+                .frame(maxHeight: 180)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+            }
+
             HStack {
+                if let rawText = receivedText {
+                    Button(model.t("copyText", fallback: "Copy text")) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(rawText, forType: .string)
+                        model.transientBanner = model.t("textCopied", fallback: "Text copied")
+                    }
+                }
                 if let folder = savedFolder {
-                    Button("Open folder") {
+                    Button(model.t("openFolder", fallback: "Open folder")) {
                         NSWorkspace.shared.activateFileViewerSelecting([folder])
                     }
                 }
-                Button("Done") {
+                Button(model.t("done", fallback: "Done")) {
                     model.receiveInputCode = ""
                     model.resetCompletedOrFailed()
                 }
@@ -244,12 +336,12 @@ public struct ReceiveView: View {
                 Text(cause)
                     .font(.callout)
             }
-            DisclosureGroup("Details") {
+            DisclosureGroup(model.t("moreInfo", fallback: "Details")) {
                 Text(detail)
                     .font(.caption.monospaced())
                     .textSelection(.enabled)
             }
-            Button("Try again") {
+            Button(model.t("tryAgain", fallback: "Try again")) {
                 model.resetCompletedOrFailed()
             }
         }
@@ -264,17 +356,17 @@ public struct ReceiveView: View {
         do {
             try handler.perform([request])
             guard let payload = request.results?.compactMap(\.payloadStringValue).first else {
-                model.transientBanner = "There is no TotalDrop code in that image."
+                model.transientBanner = model.t("receiveQrNotFound", fallback: "There is no TotalDrop code in that image.")
                 return
             }
-            if let url = URL(string: payload), let code = MacAppModel.extractTransferCode(from: url) {
+            if let code = model.extractCodeFromClipboardText(payload) {
                 model.receiveInputCode = code
                 model.startReceiveConnection()
             } else {
-                model.receiveInputCode = payload
+                model.transientBanner = model.t("receiveQrNotFound", fallback: "There is no TotalDrop code in that image.")
             }
         } catch {
-            model.transientBanner = "There is no TotalDrop code in that image."
+            model.transientBanner = model.t("receiveQrNotFound", fallback: "There is no TotalDrop code in that image.")
         }
     }
 }

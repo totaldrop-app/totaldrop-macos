@@ -4,11 +4,11 @@
 # Intel Mac (x86_64-apple-darwin) Homebrew Cask recipe for TotalDrop on macOS.
 
 cask "totaldrop" do
-  version "0.2.0-beta.5"
+  version "0.3.0-beta.6"
   sha256 "REPLACE_WITH_CI_X86_64_DMG_SHA256"
 
-  url "https://github.com/totaldrop-app/totaldrop/releases/download/macos-v#{version}/totaldrop-macos-#{version}-x86_64.dmg",
-      verified: "github.com/totaldrop-app/totaldrop/"
+  url "https://github.com/totaldrop-app/totaldrop-macos/releases/download/macos-dmg-x86_64-v#{version}/TotalDrop-#{version}-x86_64.dmg",
+      verified: "github.com/totaldrop-app/totaldrop-macos/"
   name "TotalDrop"
   desc "Send files straight to another device, end-to-end encrypted (Intel Mac)"
   homepage "https://totaldrop.app"

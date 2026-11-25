@@ -1,6 +1,11 @@
-# Hardened CI workflow for totaldrop-macos: cross-platform Rust bridge checks,
-# dual-architecture macOS builds (Apple Silicon arm64 + Intel x86_64), Swift 6
-# UI build and test, dependency auditing, REUSE 3.3 licensing, and secret scan.
+# SPDX-FileCopyrightText: 2026 The TotalDrop Contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Hardened CI workflow for totaldrop-macos (ADR 0009, ADR 0019, ADR 0020):
+# pinned macos-15 + Linux multi-arch Rust FFI/bridge checks, deterministic Kose
+# AppIcon.icns & version/header parity, dual-architecture macOS staticlib +
+# live Swift 6 FFI build/test, real TotalDrop.app + Universal binary + ad-hoc
+# codesign + UDZO .dmg verification, cargo-deny, REUSE 3.3, and gitleaks.
 name: CI
 
 on:
@@ -8,6 +13,7 @@ on:
   push:
     branches: [main]
   merge_group:
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -23,12 +29,12 @@ env:
 
 jobs:
   rust-bridge:
-    name: Rust Bridge (${{ matrix.os }})
+    name: Rust Bridge & FFI (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, ubuntu-24.04-arm]
+        os: [ubuntu-latest, ubuntu-24.04-arm]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -44,9 +50,35 @@ jobs:
           TOTALDROP_REQUIRE_IPV6: "1"
         run: cargo test --workspace --locked
 
+  static-checks:
+    name: Static assets, versions & subplatforms
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify macOS version, C header & ADR 0009 runner parity
+        run: python3 tools/check-versions.py
+      - name: Verify deterministic Kose AppIcon.icns
+        run: python3 tools/render-macos-assets.py --check
+      - name: Self-test TotalDrop.app bundle verifier
+        run: python3 tools/verify-macos-bundle.py --self-test
+      - name: Verify 35-locale Localizable.xcstrings parity
+        run: >-
+          python3 -c 'import json; xc=json.load(open("ui-swiftui-macos/Resources/Localizable.xcstrings"));
+          assert len(xc["strings"]["verificationTitle"]["localizations"]) == 35'
+      - name: Validate packaging shell script syntax & 6 subplatform units
+        run: |
+          for script in target-*/*.sh; do
+            bash -n "$script"
+          done
+          python3 tools/verify-subplatforms.py
+
   macos-dual-arch:
-    name: macOS Dual-Arch (arm64 + x86_64)
-    runs-on: macos-latest
+    name: macOS Rust Tests, Dual-Arch FFI, Swift 6 & Bundle (macos-15)
+    runs-on: macos-15
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,21 +87,46 @@ jobs:
         run: |
           rustup show active-toolchain || rustup toolchain install
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
-      - name: Build Rust bridge (Apple Silicon arm64)
-        run: cargo build --release --locked -p totaldrop-macos-bridge --target aarch64-apple-darwin
-      - name: Build Rust bridge (Intel x86_64)
-        run: cargo build --release --locked -p totaldrop-macos-bridge --target x86_64-apple-darwin
-      - name: Build and test Swift 6 macOS UI
+      - name: Clippy & Workspace Tests on macOS 15
+        env:
+          TOTALDROP_REQUIRE_IPV6: "1"
         run: |
-          swift build --package-path ui-swiftui-macos --configuration release
-          swift test --package-path ui-swiftui-macos
-      - name: Validate macOS packaging shell scripts, 35-locale xcstrings & 6 subplatform units
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --locked
+      - name: Build Rust C ABI FFI staticlib (Apple Silicon arm64)
+        run: cargo build --release --locked -p totaldrop-macos-ffi --target aarch64-apple-darwin
+      - name: Build Rust C ABI FFI staticlib (Intel x86_64)
+        run: cargo build --release --locked -p totaldrop-macos-ffi --target x86_64-apple-darwin
+      - name: Test Swift 6 macOS UI linked against live libtotaldrop_macos_ffi.a
         run: |
-          for script in target-*/*.sh; do
-            bash -n "$script"
-          done
-          python3 -c 'import json; xc=json.load(open("ui-swiftui-macos/Resources/Localizable.xcstrings")); assert len(xc["strings"]["verificationTitle"]["localizations"]) == 35'
-          python3 tools/verify-subplatforms.py
+          HOST_ARCH="$(uname -m)"
+          if [ "$HOST_ARCH" = "arm64" ]; then
+            RUST_HOST_TARGET="aarch64-apple-darwin"
+          else
+            RUST_HOST_TARGET="x86_64-apple-darwin"
+          fi
+          swift test \
+            --package-path ui-swiftui-macos \
+            -Xlinker "-L${PWD}/target/${RUST_HOST_TARGET}/release" \
+            -Xlinker "-ltotaldrop_macos_ffi"
+      - name: Assemble, ad-hoc sign, package & verify TotalDrop.app (arm64 + universal)
+        run: |
+          ./target-arm64/build.sh
+          ./target-arm64/codesign-and-notarize.sh dist/arm64/TotalDrop.app
+          ./target-arm64/create-dmg.sh
+          python3 tools/verify-macos-bundle.py \
+            --app dist/arm64/TotalDrop.app \
+            --arch arm64 \
+            --check-native \
+            --dmg dist/arm64/TotalDrop-0.3.0-beta.6-arm64.dmg \
+            --sha256sums dist/arm64/SHA256SUMS
+
+          BUILD_UNIVERSAL=1 ./target-x86_64/build.sh
+          ./target-arm64/codesign-and-notarize.sh dist/universal/TotalDrop.app
+          python3 tools/verify-macos-bundle.py \
+            --app dist/universal/TotalDrop.app \
+            --arch universal \
+            --check-native
 
   deny:
     name: Dependencies (cargo-deny)
@@ -154,7 +211,7 @@ jobs:
   gate:
     name: CI
     if: always()
-    needs: [rust-bridge, macos-dual-arch, deny, reuse, secrets]
+    needs: [rust-bridge, static-checks, macos-dual-arch, deny, reuse, secrets]
     runs-on: ubuntu-latest
     steps:
       - env:

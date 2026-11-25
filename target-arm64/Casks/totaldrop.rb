@@ -7,12 +7,12 @@
 cask "totaldrop" do
   arch arm: "arm64", intel: "x86_64"
 
-  version "0.2.0-beta.5"
+  version "0.3.0-beta.6"
   sha256 arm:   "REPLACE_WITH_CI_ARM64_DMG_SHA256",
          intel: "REPLACE_WITH_CI_X86_64_DMG_SHA256"
 
-  url "https://github.com/totaldrop-app/totaldrop/releases/download/macos-v#{version}/totaldrop-macos-#{version}-#{arch}.dmg",
-      verified: "github.com/totaldrop-app/totaldrop/"
+  url "https://github.com/totaldrop-app/totaldrop-macos/releases/download/macos-dmg-#{arch}-v#{version}/TotalDrop-#{version}-#{arch}.dmg",
+      verified: "github.com/totaldrop-app/totaldrop-macos/"
   name "TotalDrop"
   desc "Send files straight to another device, end-to-end encrypted"
   homepage "https://totaldrop.app"

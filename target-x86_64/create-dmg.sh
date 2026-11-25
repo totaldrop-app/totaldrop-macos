@@ -9,11 +9,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-VERSION="${TOTALDROP_VERSION:-0.2.0-beta.5}"
+VERSION="${TOTALDROP_VERSION:-0.3.0-beta.6}"
 OUT_DIR="${ROOT_DIR}/dist/x86_64"
 APP_BUNDLE="${OUT_DIR}/TotalDrop.app"
 STAGING_DIR="${OUT_DIR}/dmg-staging"
-DMG_NAME="totaldrop-macos-${VERSION}-x86_64.dmg"
+DMG_NAME="TotalDrop-${VERSION}-x86_64.dmg"
 DMG_PATH="${OUT_DIR}/${DMG_NAME}"
 
 rm -rf "${STAGING_DIR}" "${DMG_PATH}"

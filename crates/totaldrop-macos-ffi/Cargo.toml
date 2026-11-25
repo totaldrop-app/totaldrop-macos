@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: 2026 The TotalDrop Contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[package]
+name = "totaldrop-macos-ffi"
+version = "0.3.0-beta.6"
+description = "Thin audited C ABI FFI staticlib boundary for TotalDrop on macOS (Swift 6 / SwiftUI)"
+license = "GPL-3.0-or-later"
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lib]
+name = "totaldrop_macos_ffi"
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tokio = { version = "1.54.1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
+totaldrop-core = { version = "0.2.0-beta.5", path = "../totaldrop-core" }
+totaldrop-l10n = { version = "0.2.0-beta.5", path = "../totaldrop-l10n" }
+totaldrop-macos-bridge = { version = "0.2.0-beta.5", path = "../totaldrop-macos-bridge" }
+totaldrop-proto = { version = "0.2.0-beta.5", path = "../totaldrop-proto" }
+
+[dev-dependencies]
+futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+indexing_slicing = "warn"
+arithmetic_side_effects = "warn"
